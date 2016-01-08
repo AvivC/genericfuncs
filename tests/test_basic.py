@@ -1,3 +1,4 @@
+import pytest
 import polyfuncs
 
 
@@ -44,3 +45,15 @@ def test_multiple_params_genfunc_correct_impl_invoked():
     assert genfunc(4, 4, 4) == 'default impl'
     assert genfunc(5, 3, 2) == 'a > b > c'
     assert genfunc(1, 10, 30) == 'a < b < c'
+
+
+def test_invalid_predicate_raises_exception():
+    @polyfuncs.generic
+    def genfunc(n):
+        return n * 2
+
+    with pytest.raises(TypeError):
+        @genfunc.when(10)
+        def impl(n):
+            return 'should never run'
+
