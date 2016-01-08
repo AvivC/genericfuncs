@@ -8,7 +8,7 @@ def test_genfunc_with_only_default_impl():
     assert genfunc(4) == 8
 
 
-def test_genfunc_correct_impl_invoked():
+def test_single_param_genfunc_correct_impl_invoked():
     @polyfuncs.generic
     def genfunc(n):
         return n * 2
@@ -27,3 +27,20 @@ def test_genfunc_correct_impl_invoked():
     assert genfunc(-5) == -10
     assert genfunc(-7) == 'n < -5'
 
+
+def test_multiple_params_genfunc_correct_impl_invoked():
+    @polyfuncs.generic
+    def genfunc(a, b, c):
+        return 'default impl'
+
+    @genfunc.when(lambda a, b, c: a > b > c)
+    def when_a_largerthan_b_largerthan_c(a, b, c):
+        return 'a > b > c'
+
+    @genfunc.when(lambda a, b, c: a < b < c)
+    def when_a_lessthan_b_lessthan_c(a, b, c):
+        return 'a < b < c'
+
+    assert genfunc(4, 4, 4) == 'default impl'
+    assert genfunc(5, 3, 2) == 'a > b > c'
+    assert genfunc(1, 10, 30) == 'a < b < c'
