@@ -10,4 +10,3 @@ class generic(object):
         def dec(func):
             self._predicates_and_funcs.append((predicate, func))
             return func
-        
