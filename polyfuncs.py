@@ -4,19 +4,14 @@ import inspect
 
 class generic(object):
     def __init__(self, wrapped):
-        self._default_impl = wrapped
+        self._default_impl = _PredicateInfo(wrapped)
         self._predicates_and_funcs = []
 
     def __call__(self, *predicate_args, **kwargs):
         for predicate_info, func in self._predicates_and_funcs:
-            predicate = predicate_info.predicate
-            predicate_args = predicate_info.args
-
-            
-
-            if predicate(*predicate_args, **kwargs):
+            if predicate_info.predicate(*predicate_args, **kwargs):
                 return func(*predicate_args, **kwargs)
-        return self._default_impl(*predicate_args, **kwargs)
+        return self._default_impl.predicate(*predicate_args, **kwargs)
 
     def when(self, predicate):
         if not isinstance(predicate, collections.Callable):
