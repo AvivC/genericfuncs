@@ -6,17 +6,18 @@ import functools
 
 class generic(object):
     def __init__(self, wrapped):
-        self._default_impl = _FunctionInfo(wrapped)
+        self._base_func = _FunctionInfo(wrapped)
         self._predicates_and_funcs = []
         functools.update_wrapper(self, wrapped)
 
     def __call__(self, *args, **kwargs):
         for predicate, func in self._predicates_and_funcs:
-            predicate_args = self._get_arg_values_for_partial_func(args, predicate.args)
-            if predicate(*predicate_args):
-                impl_arg = self._get_arg_values_for_partial_func(args, func.args)
-                return func(*impl_arg)
-        return self._default_impl(*args, **kwargs)
+            predicate_args, predicate_kwargs = self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args,
+                                                                                               kwargs)
+            if predicate(*predicate_args, **predicate_kwargs):
+                impl_args, impl_kwargs = self._get_arg_and_kwarg_values_for_partial_func(func.args, args, kwargs)
+                return func(*impl_args, **impl_kwargs)
+        return self._base_func(*args, **kwargs)
 
     def when(self, predicate):
         if isinstance(predicate, collections.Iterable):
@@ -44,20 +45,29 @@ class generic(object):
 
         def composed_predicates(*args, **kwargs):
             for predicate in predicate_infos:
-                predicate_input = self._get_arg_values_for_partial_func(args, predicate.args)
-                if not predicate(*predicate_input):
+                predicate_args, predicate_kwargs = self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args,
+                                                                                                   kwargs)
+                if not predicate(*predicate_args, **predicate_kwargs):
                     return False
             return True
 
         predicate_info = _FunctionInfo(composed_predicates)
-        predicate_info.args = self._default_impl.args
+        predicate_info.args = self._base_func.args
         return predicate_info
 
-    def _get_arg_values_for_partial_func(self, input_arg_values, partial_func_args):
-            return [input_arg_values[self._default_impl.args.index(arg_name)] for arg_name in partial_func_args]
+    def _get_arg_and_kwarg_values_for_partial_func(self, partial_func_arg_names, input_arg_values, input_kwargs):
+        partial_args = self._find_partial_arg_values(input_arg_values, partial_func_arg_names)
+        partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in partial_func_arg_names}
+        return partial_args, partial_kwargs
+
+    def _find_partial_arg_values(self, input_arg_values, partial_func_arg_names):
+        unnecessary_arg_names = set(self._base_func.args) - set(partial_func_arg_names)
+        unnecessary_arg_indexes = [self._base_func.args.index(arg_name) for arg_name in unnecessary_arg_names]
+        return [arg_value for index, arg_value in enumerate(input_arg_values)
+                if index not in unnecessary_arg_indexes]
 
     def _all_params_valid(self, function_info):
-        return all(arg in self._default_impl.args for arg in function_info.args)
+        return all(arg in self._base_func.args for arg in function_info.args)
 
 
 _PredicateFunctionMappping = namedtuple('PredicateFunctionMappping', ['predicate_info', 'func_info'])

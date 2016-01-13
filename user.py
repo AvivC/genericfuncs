@@ -1,11 +1,14 @@
 from polyfuncs import generic
 
 
-@generic(by_name=False)
-def f(a, b, c, d):
-    return a * b * c * d
+@generic
+def f(a, b, c):
+    return [a, b, c]
 
 
-@f.when(lambda a: a > 20)
-def _(a, b, c):
-    pass
+@f.when(lambda a, b, c: True)
+def _(b, c):
+    return [b, c]
+
+
+print f(1, 2, 3, c=3)

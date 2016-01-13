@@ -2,3 +2,4 @@
 .cache 
 .cache/ 
 *.pyc 
+tests/*.pyc 

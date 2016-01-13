@@ -130,3 +130,31 @@ def test_multiple_predicates():
     assert genfunc(10, 20, 30) == {'a': 10, 'b': 20, 'c': 30}
     assert genfunc(10, 50, 30) == {'a': 10, 'b': 50, 'c': 30}
     assert genfunc(10, 60, 30) == {'c': 30}
+
+
+def test_genfunc_call_with_keyword_arguments():
+    @polyfuncs.generic
+    def genfunc(a, b, c):
+        return 'default'
+
+    @genfunc.when(lambda a, b, c: a > b > c)
+    def _(a, b, c):
+        return [a, b, c]
+
+    assert genfunc(1, 1, 1) == 'default'
+    assert genfunc(a=1, b=1, c=1) == 'default'
+    assert genfunc(1, 1, c=1) == 'default'
+    assert genfunc(1, b=1, c=1) == 'default'
+    with pytest.raises(TypeError) as exc_info:
+        genfunc(1, 1, 1, c=1)
+    assert 'got multiple values for keyword argument' in str(exc_info)
+    with pytest.raises(TypeError) as exc_info:
+        genfunc(1, 1, 1, b=1, c=1)
+    assert 'got multiple values for keyword argument' in str(exc_info)
+
+    assert genfunc(3, 2, 1) == [3, 2, 1]
+    assert genfunc(a=3, b=2, c=1) == [3, 2, 1]
+    assert genfunc(3, 2, c=1) == [3, 2, 1]
+    with pytest.raises(TypeError) as exc_info:
+        genfunc(3, 2, 1, b=2, c=1)
+    assert 'got multiple values for keyword argument' in str(exc_info)
