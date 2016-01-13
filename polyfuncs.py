@@ -12,10 +12,10 @@ class generic(object):
 
     def __call__(self, *args, **kwargs):
         for predicate, func in self._predicates_and_funcs:
-            predicate_arg_values = self._get_argument_values_for_partial_func(args, predicate.args)
-            if predicate(*predicate_arg_values):
-                impl_arg_values = self._get_argument_values_for_partial_func(args, func.args)
-                return func(*impl_arg_values)
+            predicate_args = self._get_arg_values_for_partial_func(args, predicate.args)
+            if predicate(*predicate_args):
+                impl_arg = self._get_arg_values_for_partial_func(args, func.args)
+                return func(*impl_arg)
         return self._default_impl(*args, **kwargs)
 
     def when(self, predicate):
@@ -44,7 +44,7 @@ class generic(object):
 
         def composed_predicates(*args, **kwargs):
             for predicate in predicate_infos:
-                predicate_input = self._get_argument_values_for_partial_func(args, predicate.args)
+                predicate_input = self._get_arg_values_for_partial_func(args, predicate.args)
                 if not predicate(*predicate_input):
                     return False
             return True
@@ -53,7 +53,7 @@ class generic(object):
         predicate_info.args = self._default_impl.args
         return predicate_info
 
-    def _get_argument_values_for_partial_func(self, input_arg_values, partial_func_args):
+    def _get_arg_values_for_partial_func(self, input_arg_values, partial_func_args):
             return [input_arg_values[self._default_impl.args.index(arg_name)] for arg_name in partial_func_args]
 
     def _all_params_valid(self, function_info):
