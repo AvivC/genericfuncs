@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+from __future__ import division
+
 import pytest
 import polyfuncs
 
@@ -57,17 +60,6 @@ def test_invalid_predicate_raises_exception():
         @genfunc.when(10)
         def impl(n):
             return 'should never run'
-
-#
-# def test_parameter_matching():
-#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd']) == [10, 20, 30, 40]
-#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['b', 'c']) == [20, 30]
-#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['c', 'b']) == [30, 20]
-#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['d', 'a']) == [40, 10]
-#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['b']) == [20]
-#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], []) == []
-#     with pytest.raises(ValueError):
-#         polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['e'])
 
 
 def test_parameter_injection():
@@ -158,3 +150,17 @@ def test_genfunc_call_with_keyword_arguments():
     with pytest.raises(TypeError) as exc_info:
         genfunc(3, 2, 1, b=2, c=1)
     assert 'got multiple values for keyword argument' in str(exc_info)
+
+
+def test_invalid_genfunc_calls_raise_error():
+    @polyfuncs.generic
+    def genfunc(a, b, c):
+        return 'default'
+
+    with pytest.raises(ValueError) as exc_info:
+        genfunc(1, 2, 3, 4)
+    assert 'Received too many positional arguments.' in str(exc_info)
+
+    with pytest.raises(ValueError) as exc_info:
+        genfunc(1, 2, d=3)
+    assert 'One or more keyword arguments don\'t exist in the generic function.' in str(exc_info)

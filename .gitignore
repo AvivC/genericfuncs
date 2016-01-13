@@ -3,3 +3,4 @@
 .cache/ 
 *.pyc 
 tests/*.pyc 
+user.py 
