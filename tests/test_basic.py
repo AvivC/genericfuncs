@@ -58,16 +58,16 @@ def test_invalid_predicate_raises_exception():
         def impl(n):
             return 'should never run'
 
-
-def test_parameter_matching():
-    assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd']) == [10, 20, 30, 40]
-    assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['b', 'c']) == [20, 30]
-    assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['c', 'b']) == [30, 20]
-    assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['d', 'a']) == [40, 10]
-    assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['b']) == [20]
-    assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], []) == []
-    with pytest.raises(ValueError):
-        polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['e'])
+#
+# def test_parameter_matching():
+#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['a', 'b', 'c', 'd']) == [10, 20, 30, 40]
+#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['b', 'c']) == [20, 30]
+#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['c', 'b']) == [30, 20]
+#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['d', 'a']) == [40, 10]
+#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['b']) == [20]
+#     assert polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], []) == []
+#     with pytest.raises(ValueError):
+#         polyfuncs._match_arg_values_for_partial_func([10, 20, 30, 40], ['a', 'b', 'c', 'd'], ['e'])
 
 
 def test_parameter_injection():
@@ -108,3 +108,25 @@ def test_parameter_injection():
         def _(b, c, e):
             return locals()
     assert "Argument specified in implementation doesn\'t exist in base function." in str(exc_info)
+
+
+def test_multiple_predicates():
+    @polyfuncs.generic
+    def genfunc(a, b, c):
+        pass
+
+    @genfunc.when([lambda a, b, c: a == 10 and b == 20 and c == 30, lambda a, b, c: c > b > a])
+    def _(a, b, c):
+        return locals()
+
+    @genfunc.when([lambda b: b == 50, lambda a, c: c > a])
+    def _(a, b, c):
+        return locals()
+
+    @genfunc.when([lambda b: b == 60, lambda a, c: c > a])
+    def _(c):
+        return locals()
+
+    assert genfunc(10, 20, 30) == {'a': 10, 'b': 20, 'c': 30}
+    assert genfunc(10, 50, 30) == {'a': 10, 'b': 50, 'c': 30}
+    assert genfunc(10, 60, 30) == {'c': 30}

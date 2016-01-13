@@ -12,18 +12,21 @@ class generic(object):
 
     def __call__(self, *args, **kwargs):
         for predicate, func in self._predicates_and_funcs:
-            predicate_arg_values = _match_arg_values_for_partial_func(args, self._default_impl.args, predicate.args)
+            predicate_arg_values = self._get_argument_values_for_partial_func(args, predicate.args)
             if predicate(*predicate_arg_values):
-                impl_arg_values = _match_arg_values_for_partial_func(args, self._default_impl.args, func.args)
+                impl_arg_values = self._get_argument_values_for_partial_func(args, func.args)
                 return func(*impl_arg_values)
         return self._default_impl(*args, **kwargs)
 
     def when(self, predicate):
-        if not isinstance(predicate, collections.Callable):
-            raise TypeError('Predicate isn\'t a callable.')
+        if isinstance(predicate, collections.Iterable):
+            predicate_info = self._compose_predicates(predicate)
+        elif isinstance(predicate, collections.Callable):
+            predicate_info = _FunctionInfo(predicate)
+        else:
+            raise TypeError('Input to when() is not a callable nor an iterable of callables.')
 
         def dec(func):
-            predicate_info = _FunctionInfo(predicate)
             impl_info = _FunctionInfo(func)
 
             if not self._all_params_valid(predicate_info):
@@ -36,12 +39,26 @@ class generic(object):
 
         return dec
 
+    def _compose_predicates(self, predicates):
+        predicate_infos = map(_FunctionInfo, predicates)
+
+        def composed_predicates(*args, **kwargs):
+            for predicate in predicate_infos:
+                predicate_input = self._get_argument_values_for_partial_func(args, predicate.args)
+                if not predicate(*predicate_input):
+                    return False
+            return True
+
+        predicate_info = _FunctionInfo(composed_predicates)
+        predicate_info.args = self._default_impl.args
+        return predicate_info
+
+    def _get_argument_values_for_partial_func(self, input_arg_values, partial_func_args):
+            return [input_arg_values[self._default_impl.args.index(arg_name)] for arg_name in partial_func_args]
+
     def _all_params_valid(self, function_info):
         return all(arg in self._default_impl.args for arg in function_info.args)
 
-
-def _match_arg_values_for_partial_func(input_arg_values, base_func_args, partial_func_args):
-    return [input_arg_values[base_func_args.index(arg_name)] for arg_name in partial_func_args]
 
 _PredicateFunctionMappping = namedtuple('PredicateFunctionMappping', ['predicate_info', 'func_info'])
 
