@@ -1,1 +1,3 @@
-{}
+{
+  "tests/test_basic.py::test_single_param_genfunc_correct_impl_invoked": true
+}

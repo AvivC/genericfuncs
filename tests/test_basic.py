@@ -26,11 +26,16 @@ def test_single_param_genfunc_correct_impl_invoked():
     def when_n_smallerthan_minus_5(n):
         return 'n < -5'
 
+    @genfunc.when(str)
+    def when_n_is_str(n):
+        return 'n is str'
+
     assert genfunc(5) == 10
     assert genfunc(10) == 20
     assert genfunc(15) == 'n > 10'
     assert genfunc(-5) == -10
     assert genfunc(-7) == 'n < -5'
+    assert genfunc('abc') == 'n is str'
 
 
 def test_multiple_params_genfunc_correct_impl_invoked():

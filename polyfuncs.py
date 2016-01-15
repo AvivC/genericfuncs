@@ -33,6 +33,11 @@ class generic(object):
     def when(self, predicate):
         if isinstance(predicate, collections.Iterable):
             predicate_info = self._compose_predicates(predicate)
+        elif isinstance(predicate, type):
+            predicate_info = _FunctionInfo(
+                    lambda *args, **kwargs:
+                    all(isinstance(obj, type) for obj in args)
+                    and all(isinstance(obj, type) for key, obj in kwargs.iteritems()))
         elif isinstance(predicate, collections.Callable):
             predicate_info = _FunctionInfo(predicate)
         else:
