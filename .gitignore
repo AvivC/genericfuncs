@@ -1,6 +1,5 @@
-.idea/ 
-.cache 
+.idea/
 .cache/ 
-*.pyc 
+*.pyc
 tests/*.pyc 
 user.py 
