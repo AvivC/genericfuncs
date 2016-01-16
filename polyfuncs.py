@@ -1,5 +1,4 @@
-from __future__ import unicode_literals
-from __future__ import division
+from __future__ import unicode_literals, division, print_function, absolute_import
 
 import collections
 import inspect
@@ -14,14 +13,12 @@ class generic(object):
         functools.update_wrapper(self, wrapped)
 
     def __call__(self, *args, **kwargs):
-        self._validate_args(args, kwargs)  # should probably do a more 'native-python' solution later
+        self._validate_args(args, kwargs)
 
         for predicate, func in self._predicates_and_funcs:
-            predicate_args, predicate_kwargs = \
-                self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args, kwargs)
-            if predicate(*predicate_args, **predicate_kwargs):
-                impl_args, impl_kwargs = self._get_arg_and_kwarg_values_for_partial_func(func.args, args, kwargs)
-                return func(*impl_args, **impl_kwargs)
+            if self._invoke_partial_func(predicate, args, kwargs):
+                return self._invoke_partial_func(func, args, kwargs)
+
         return self._base_func(*args, **kwargs)
 
     def _validate_args(self, args, kwargs):
@@ -30,7 +27,15 @@ class generic(object):
         if len(args) > len(self._base_func.args):
             raise ValueError('Received too many positional arguments.')
 
-    def _get_arg_and_kwarg_values_for_partial_func(self, partial_func_arg_names, input_arg_values, input_kwargs):
+    def _invoke_partial_func(self, partial_func, input_args, input_kwargs):
+        partial_args, partial_kwargs = \
+            self._get_partial_func_arg_and_kwarg_values(partial_func.args, input_args, input_kwargs)
+        try:
+            return partial_func(*partial_args, **partial_kwargs)
+        except partial_func.ignored_errors:
+            return False
+
+    def _get_partial_func_arg_and_kwarg_values(self, partial_func_arg_names, input_arg_values, input_kwargs):
         partial_args = self._find_partial_arg_values(input_arg_values, partial_func_arg_names)
         partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in partial_func_arg_names}
         return partial_args, partial_kwargs
@@ -41,8 +46,8 @@ class generic(object):
         return [arg_value for index, arg_value in enumerate(input_arg_values)
                 if index not in unnecessary_arg_indexes]
 
-    def when(self, predicate):
-        predicate_info = self._make_predicate_info(predicate)
+    def when(self, predicate, ignored_errors=None):
+        predicate_info = self._make_predicate_info(predicate, ignored_errors=ignored_errors)
 
         def dec(func):
             impl_info = _FunctionInfo(func)
@@ -57,37 +62,33 @@ class generic(object):
 
         return dec
 
-    def _make_predicate_info(self, predicate):
+    def _make_predicate_info(self, predicate, ignored_errors=None):
         if isinstance(predicate, collections.Callable):
             if inspect.isfunction(predicate) or inspect.ismethod(predicate):
-                return _FunctionInfo(predicate)
+                return _FunctionInfo(predicate, ignored_errors=ignored_errors)
             elif isinstance(predicate, type):
-                return self._make_type_predicate(predicate)
+                return self._make_type_predicate(predicate, ignored_errors=ignored_errors)
             else:  # callable object
-                return _FunctionInfo(predicate.__call__)
+                return _FunctionInfo(predicate.__call__, ignored_errors=ignored_errors)
         elif isinstance(predicate, collections.Iterable):
-            return self._compose_predicates(predicate)
+            return self._compose_predicates(predicate, ignored_errors=ignored_errors)
         else:
             raise TypeError('Input to when() is not a callable nor an iterable of callables.')
 
-    def _make_type_predicate(self, predicate):
+    def _make_type_predicate(self, predicate, ignored_errors=None):
         def type_predicate(*args, **kwargs):
             return all(isinstance(obj, predicate) for obj in args) \
                    and all(isinstance(obj, predicate) for key, obj in kwargs.iteritems())
-        return _FunctionInfo(type_predicate, args=self._base_func.args)
+        return _FunctionInfo(type_predicate, args=self._base_func.args, ignored_errors=ignored_errors)
 
-    def _compose_predicates(self, predicates):
+    def _compose_predicates(self, predicates, ignored_errors=None):
         predicate_infos = map(self._make_predicate_info, predicates)
 
         def composed_predicates(*args, **kwargs):
-            for predicate in predicate_infos:
-                predicate_args, predicate_kwargs = \
-                    self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args, kwargs)
-                if not predicate(*predicate_args, **predicate_kwargs):
-                    return False
-            return True
+            return all(self._invoke_partial_func(predicate, args, kwargs)
+                       for predicate in predicate_infos)
 
-        return _FunctionInfo(composed_predicates, args=self._base_func.args)
+        return _FunctionInfo(composed_predicates, args=self._base_func.args, ignored_errors=ignored_errors)
 
     def _all_params_valid(self, function_info):
         return all(arg in self._base_func.args for arg in function_info.args)
@@ -97,8 +98,9 @@ _PredicateFunctionMappping = namedtuple('PredicateFunctionMappping', ['predicate
 
 
 class _FunctionInfo(object):
-    def __init__(self, function, args=None):
+    def __init__(self, function, args=None, ignored_errors=None):
         self.function = function
+        self.ignored_errors = () if ignored_errors is None else tuple(ignored_errors)
 
         if args is None:
             self.args = function.__code__.co_varnames[:function.__code__.co_argcount]

@@ -177,3 +177,48 @@ def test_invalid_genfunc_calls_raise_error():
     with pytest.raises(ValueError) as exc_info:
         genfunc(1, 2, d=3)
     assert 'One or more keyword arguments don\'t exist in the generic function.' in str(exc_info)
+
+
+def test_predicate_with_ignored_errors():
+    @polyfuncs.generic
+    def genfunc1(a):
+        return 'default'
+
+    # upon call to genfunc1, when invoking this predicate a raised TypeError should be handled by returning False
+    @genfunc1.when(lambda a: len(a) == 5, ignored_errors=[TypeError, AttributeError])
+    def _(a):
+        return 'len(a) > 5'
+
+    def rouge_predicate(a):
+        raise ValueError()
+
+    # the predicate should raise an AttributeError, but it should be ignored and
+    # False should be returned, skipping to the next predicate
+    @genfunc1.when([rouge_predicate, int], ignored_errors=[ValueError])
+    def _(a):
+        return 'a.nonexisting_attr == 10 and a is an int'
+
+    # upon call to genfunc1, TypeError should crash the program if so far no predicate returned True
+    @genfunc1.when(lambda a: a.nonexisting_attr == 10)
+    def _(a):
+        return 'a.nonexisting_attr == 10'
+
+    # when arriving at the first predicate, the TypeError should be ignored and False returned.
+    # at the third predicate, an AttributeError should be raised, ignored, and False returned.
+    # arriving at the third predicate, `a.nonexisting_attr` should raise an AttributeError which won't be ignored.
+    with pytest.raises(AttributeError):
+        genfunc1(10)
+
+    assert genfunc1([1, 2, 3, 4, 5]) == 'len(a) > 5'
+
+    @polyfuncs.generic
+    def genfunc2(a):
+        return 'default'
+
+    # this time the ValueError shouldn't be ignored, because we specify we ignore only AttributeErrors and IndexErrors.
+    @genfunc2.when([rouge_predicate, int], ignored_errors=[AttributeError, IndexError])
+    def _(a):
+        return 'a.nonexisting_attr == 10 and a is an int'
+
+    with pytest.raises(ValueError):
+        genfunc2('doesn\'t matter')
