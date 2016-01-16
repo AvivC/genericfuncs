@@ -13,32 +13,7 @@ def test_genfunc_with_only_default_impl():
     assert genfunc(n=4) == 8
 
 
-def test_single_param_genfunc_correct_impl_invoked():
-    @polyfuncs.generic
-    def genfunc(n):
-        return n * 2
-
-    @genfunc.when(lambda n: n > 10)
-    def when_n_largerthan_10(n):
-        return 'n > 10'
-
-    @genfunc.when(lambda n: n < -5)
-    def when_n_smallerthan_minus_5(n):
-        return 'n < -5'
-
-    @genfunc.when(str)
-    def when_n_is_str(n):
-        return 'n is str'
-
-    assert genfunc(5) == 10
-    assert genfunc(10) == 20
-    assert genfunc(15) == 'n > 10'
-    assert genfunc(-5) == -10
-    assert genfunc(-7) == 'n < -5'
-    assert genfunc('abc') == 'n is str'
-
-
-def test_multiple_params_genfunc_correct_impl_invoked():
+def test_correct_genfunc_impl_invoked():
     @polyfuncs.generic
     def genfunc(a, b, c):
         return 'default impl'
@@ -47,13 +22,36 @@ def test_multiple_params_genfunc_correct_impl_invoked():
     def when_a_largerthan_b_largerthan_c(a, b, c):
         return 'a > b > c'
 
+    @genfunc.when(long)
+    def when_all_params_long(a, b, c):
+        return 'all are long'
+
     @genfunc.when(lambda a, b, c: a < b < c)
     def when_a_lessthan_b_lessthan_c(a, b, c):
         return 'a < b < c'
 
+    class C1(object):
+        def predicate(self, a, b, c):
+            return a * b * c == 0
+
+    @genfunc.when(C1().predicate)
+    def when_one_or_more_params_is_zero(a, b, c):
+        return 'one or more is 0'
+
+    class C2(object):
+        def __call__(self, a, b, c):
+            return a == b == c == 8
+
+    @genfunc.when(C2())
+    def when_all_equal_eight(a, b, c):
+        return 'a == b == c == 8'
+
     assert genfunc(4, 4, 4) == 'default impl'
     assert genfunc(5, 3, 2) == 'a > b > c'
+    assert genfunc(10L, 20L, 1L) == 'all are long'
     assert genfunc(1, 10, 30) == 'a < b < c'
+    assert genfunc(2, 10, 0) == 'one or more is 0'
+    assert genfunc(8, 8, 8) == 'a == b == c == 8'
 
 
 def test_invalid_predicate_raises_exception():
@@ -110,7 +108,7 @@ def test_parameter_injection():
 def test_multiple_predicates():
     @polyfuncs.generic
     def genfunc(a, b, c):
-        pass
+        return 'default'
 
     @genfunc.when([lambda a, b, c: a == 10 and b == 20 and c == 30, lambda a, b, c: c > b > a])
     def _(a, b, c):
@@ -124,9 +122,19 @@ def test_multiple_predicates():
     def _(c):
         return locals()
 
+    @genfunc.when([lambda b: b == 'paramb', lambda a, c: a == 'parama' and c == 'paramc', basestring])
+    def _(c):
+        return locals()
+
+    @genfunc.when([float, int])  # should never run
+    def _(a, b, c):
+        return locals()
+
     assert genfunc(10, 20, 30) == {'a': 10, 'b': 20, 'c': 30}
     assert genfunc(10, 50, 30) == {'a': 10, 'b': 50, 'c': 30}
     assert genfunc(10, 60, 30) == {'c': 30}
+    assert genfunc('parama', 'paramb', 'paramc') == {'c': 'paramc'}
+    assert genfunc(10, 1.5, 5) == 'default'
 
 
 def test_genfunc_call_with_keyword_arguments():

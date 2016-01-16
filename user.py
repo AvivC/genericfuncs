@@ -2,13 +2,26 @@ from polyfuncs import generic
 
 
 @generic
-def f(a, b, c):
-    return [a, b, c]
+def f(a):
+    return 'default'
 
 
-@f.when(lambda a, b, c: True)
-def _(b, c):
-    return [b, c]
+@f.when(int)
+def _(a):
+    return 'int'
+
+@f.when(str)
+def _(a):
+    return 'str'
+
+@f.when(lambda a: len(a) >= 10)
+def _(a):
+    return 'len(n) > 10'
 
 
-print f(1, 2, 3, c=3)
+
+
+print f(1)
+print f('aaa')
+print f([])
+print f('bbbbbbbbbbbb')

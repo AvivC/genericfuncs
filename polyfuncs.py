@@ -17,8 +17,8 @@ class generic(object):
         self._validate_args(args, kwargs)  # should probably do a more 'native-python' solution later
 
         for predicate, func in self._predicates_and_funcs:
-            predicate_args, predicate_kwargs = self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args,
-                                                                                               kwargs)
+            predicate_args, predicate_kwargs = \
+                self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args, kwargs)
             if predicate(*predicate_args, **predicate_kwargs):
                 impl_args, impl_kwargs = self._get_arg_and_kwarg_values_for_partial_func(func.args, args, kwargs)
                 return func(*impl_args, **impl_kwargs)
@@ -30,18 +30,19 @@ class generic(object):
         if len(args) > len(self._base_func.args):
             raise ValueError('Received too many positional arguments.')
 
+    def _get_arg_and_kwarg_values_for_partial_func(self, partial_func_arg_names, input_arg_values, input_kwargs):
+        partial_args = self._find_partial_arg_values(input_arg_values, partial_func_arg_names)
+        partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in partial_func_arg_names}
+        return partial_args, partial_kwargs
+
+    def _find_partial_arg_values(self, input_arg_values, partial_func_arg_names):
+        unnecessary_arg_names = set(self._base_func.args) - set(partial_func_arg_names)
+        unnecessary_arg_indexes = [self._base_func.args.index(arg_name) for arg_name in unnecessary_arg_names]
+        return [arg_value for index, arg_value in enumerate(input_arg_values)
+                if index not in unnecessary_arg_indexes]
+
     def when(self, predicate):
-        if isinstance(predicate, collections.Iterable):
-            predicate_info = self._compose_predicates(predicate)
-        elif isinstance(predicate, type):
-            predicate_info = _FunctionInfo(
-                    lambda *args, **kwargs:
-                    all(isinstance(obj, type) for obj in args)
-                    and all(isinstance(obj, type) for key, obj in kwargs.iteritems()))
-        elif isinstance(predicate, collections.Callable):
-            predicate_info = _FunctionInfo(predicate)
-        else:
-            raise TypeError('Input to when() is not a callable nor an iterable of callables.')
+        predicate_info = self._make_predicate_info(predicate)
 
         def dec(func):
             impl_info = _FunctionInfo(func)
@@ -56,31 +57,37 @@ class generic(object):
 
         return dec
 
+    def _make_predicate_info(self, predicate):
+        if isinstance(predicate, collections.Callable):
+            if inspect.isfunction(predicate) or inspect.ismethod(predicate):
+                return _FunctionInfo(predicate)
+            elif isinstance(predicate, type):
+                return self._make_type_predicate(predicate)
+            else:  # callable object
+                return _FunctionInfo(predicate.__call__)
+        elif isinstance(predicate, collections.Iterable):
+            return self._compose_predicates(predicate)
+        else:
+            raise TypeError('Input to when() is not a callable nor an iterable of callables.')
+
+    def _make_type_predicate(self, predicate):
+        def type_predicate(*args, **kwargs):
+            return all(isinstance(obj, predicate) for obj in args) \
+                   and all(isinstance(obj, predicate) for key, obj in kwargs.iteritems())
+        return _FunctionInfo(type_predicate, args=self._base_func.args)
+
     def _compose_predicates(self, predicates):
-        predicate_infos = map(_FunctionInfo, predicates)
+        predicate_infos = map(self._make_predicate_info, predicates)
 
         def composed_predicates(*args, **kwargs):
             for predicate in predicate_infos:
-                predicate_args, predicate_kwargs = self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args,
-                                                                                                   kwargs)
+                predicate_args, predicate_kwargs = \
+                    self._get_arg_and_kwarg_values_for_partial_func(predicate.args, args, kwargs)
                 if not predicate(*predicate_args, **predicate_kwargs):
                     return False
             return True
 
-        predicate_info = _FunctionInfo(composed_predicates)
-        predicate_info.args = self._base_func.args
-        return predicate_info
-
-    def _get_arg_and_kwarg_values_for_partial_func(self, partial_func_arg_names, input_arg_values, input_kwargs):
-        partial_args = self._find_partial_arg_values(input_arg_values, partial_func_arg_names)
-        partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in partial_func_arg_names}
-        return partial_args, partial_kwargs
-
-    def _find_partial_arg_values(self, input_arg_values, partial_func_arg_names):
-        unnecessary_arg_names = set(self._base_func.args) - set(partial_func_arg_names)
-        unnecessary_arg_indexes = [self._base_func.args.index(arg_name) for arg_name in unnecessary_arg_names]
-        return [arg_value for index, arg_value in enumerate(input_arg_values)
-                if index not in unnecessary_arg_indexes]
+        return _FunctionInfo(composed_predicates, args=self._base_func.args)
 
     def _all_params_valid(self, function_info):
         return all(arg in self._base_func.args for arg in function_info.args)
@@ -90,9 +97,15 @@ _PredicateFunctionMappping = namedtuple('PredicateFunctionMappping', ['predicate
 
 
 class _FunctionInfo(object):
-    def __init__(self, function):
+    def __init__(self, function, args=None):
         self.function = function
-        self.args = inspect.getargspec(function).args
+
+        if args is None:
+            self.args = function.__code__.co_varnames[:function.__code__.co_argcount]
+            if inspect.ismethod(function):
+                self.args = self.args[1:]  # strip self argument
+        else:
+            self.args = args
 
     def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
