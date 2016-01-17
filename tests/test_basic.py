@@ -2,11 +2,11 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import pytest
-import polyfuncs
+import genericfuncs
 
 
 def test_genfunc_with_only_default_impl():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(n):
         return n * 2
     assert genfunc(4) == 8
@@ -14,7 +14,7 @@ def test_genfunc_with_only_default_impl():
 
 
 def test_correct_genfunc_impl_invoked():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(a, b, c):
         return 'default impl'
 
@@ -55,7 +55,7 @@ def test_correct_genfunc_impl_invoked():
 
 
 def test_invalid_predicate_raises_exception():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(n):
         return n * 2
 
@@ -66,7 +66,7 @@ def test_invalid_predicate_raises_exception():
 
 
 def test_parameter_injection():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(a, b, c, d):
         return locals()
 
@@ -106,7 +106,7 @@ def test_parameter_injection():
 
 
 def test_multiple_predicates():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(a, b, c):
         return 'default'
 
@@ -138,7 +138,7 @@ def test_multiple_predicates():
 
 
 def test_genfunc_call_with_keyword_arguments():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(a, b, c):
         return 'default'
 
@@ -166,7 +166,7 @@ def test_genfunc_call_with_keyword_arguments():
 
 
 def test_invalid_genfunc_calls_raise_error():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc(a, b, c):
         return 'default'
 
@@ -180,7 +180,7 @@ def test_invalid_genfunc_calls_raise_error():
 
 
 def test_predicate_with_ignored_errors():
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc1(a):
         return 'default'
 
@@ -211,7 +211,7 @@ def test_predicate_with_ignored_errors():
 
     assert genfunc1([1, 2, 3, 4, 5]) == 'len(a) > 5'
 
-    @polyfuncs.generic
+    @genericfuncs.generic
     def genfunc2(a):
         return 'default'
 

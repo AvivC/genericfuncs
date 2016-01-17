@@ -7,6 +7,63 @@ import functools
 
 
 class generic(object):
+    """
+    A decorator to turn functions into generic functions.
+    Upon invocation of a generic function, the registered predicates are invoked
+    in order of registration, passing in the arguments to the function.
+    The first predicate returning True, has its mapped implementation invoked.
+
+    A predicate may be any one of the following:
+    Types, any boolean callable, or lists of predicates (with AND relations):
+
+        @genericfuncs.generic
+        def func(a):
+            # default implementation
+            raise TypeError()
+
+        @func.when(int)  # dispatch on type
+        def _when_int(a):
+            return a * a
+
+        @func.when(lambda a: a == 'magic')  # dispatch on arbitrary predicates
+        def _when_magic_word(a):
+            return a.upper()
+
+        @func.when([float, lambda a: a < 0])  # dispatch on multiple predicates
+        def _when_float_and_negative(a):
+            return a * -1
+
+        func(10) --> 100  # _when_int invoked
+        func('magic') --> 'MAGIC'  # _when_magic_word invoked
+        func(-5.5) --> 5.5  # _when_float_and_negative
+        func(Something()) --> TypeError raised  # default implementation invoked
+
+    Arguments are injected into predicates by their name. This allows predicates to list which of the
+    arguments they want to consider.
+
+    The same goes for implementations - the parameters are injected by name, and not all arguments must be listed.
+
+        @generic
+        def multiple_params_func(a, b, c):
+            return a + b + c  # default implementation
+
+        @multiple_params_func.when(lambda b: b > 10)  # only inject paramter `b` to the predicate
+        def _when_b_greater_than_10(a):  # only inject `a`
+            return a * 10
+
+        @multiple_params_func.when(lambda a, b: a % b == 0)  # inject only `a` and `b`
+        def _when_a_divisible_by_c(a, b, c):
+            return a / b * c
+
+    The call site however, must always list all mandatory arguments, as always.
+
+        multiple_params_func(10, 20, 30) --> 100  # _when_b_great_than_10 invoked
+        multiple_params_func(4, 2, 'bla') --> 'blabla'  # _when_a_divisible_by_c invoked
+        multiple_params_func(0, 0, 0) --> 0  # default implementation invoked
+
+    More info about the when() decorator can be found in its docs.
+    """
+
     def __init__(self, wrapped):
         self._base_func = _FunctionInfo(wrapped)
         self._predicates_and_funcs = []
@@ -47,6 +104,29 @@ class generic(object):
                 if index not in unnecessary_arg_indexes]
 
     def when(self, predicate, ignored_errors=None):
+        """
+        A decorator used to register an implementation to a generic function.
+        The decorator takes a predicate, to which the implementation will be mapped.
+        Upon invocation of the generic function, the first implementation whose
+        predicate returned True will be invoked.
+
+        :param predicate: The predicate may be any one of the following options:
+                            A type (meaning an `isinstance()` check), a callable that returns a boolean,
+                            or a list of predicates (with AND relations between them):
+        :param ignored_errors: A list of exception types that should not be propagated
+                               if raised inside the predicate.
+                               For example:
+
+                                    @my_generic_func.when(lambda a: a > 10, ignored_errors=[TypeError])
+                                    def _implementation(a):
+                                        ...
+
+                               When invoking `my_generic_func(MyThing())`, a TypeError will be raised
+                               inside the predicate, probably crashing the program.
+                               This is because MyThing objects don't support `>` operator.
+                               Specifying `ignored_errors=[TypeError]` makes the error be silently ignored,
+                               moving on to the next predicate.
+        """
         predicate_info = self._make_predicate_info(predicate, ignored_errors=ignored_errors)
 
         def dec(func):
