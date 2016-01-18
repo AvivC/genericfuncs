@@ -3,3 +3,5 @@
 *.pyc
 tests/*.pyc 
 user.py 
+dist/ 
+genericfuncs.egg-info/ 

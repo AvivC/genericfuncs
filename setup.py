@@ -9,12 +9,13 @@ setup(
     description='Dynamic dispatch over arbitrary predicates',
     long_description=_readme,
     version='0.1.0',
+    url='https://github.com/AvivC/genericfuncs',
     author='Aviv Cohn',
     author_email='avivcohn123@yahoo.com',
     license='MIT',
     py_modules=['genericfuncs'],
     classifiers=[
-        'Development Status :: 3 - Alpha'
+        'Development Status :: 3 - Alpha',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
