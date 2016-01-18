@@ -9,7 +9,7 @@ This module can be seen as a powerful improvement over Python 3's `singledispatc
 * Allows dispatch over any boolean callable, not just type checks.
 * Allows dispatch over any number of arguments, not just the first argument.
 
-Basic usage::
+Example usage::
 
     # define a generic function
     @genericfuncs.generic
