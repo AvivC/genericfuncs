@@ -8,7 +8,7 @@ setup(
     name='genericfuncs',
     description='Dynamic dispatch over arbitrary predicates',
     long_description=_readme,
-    version='0.1.0',
+    version='0.1.1',
     url='https://github.com/AvivC/genericfuncs',
     author='Aviv Cohn',
     author_email='avivcohn123@yahoo.com',
