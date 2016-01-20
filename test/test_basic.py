@@ -222,3 +222,63 @@ def test_predicate_with_ignored_errors():
 
     with pytest.raises(ValueError):
         genfunc2('doesn\'t matter')
+
+
+def test_predicates_with_type_precondition_all_same_type():
+    @genericfuncs.generic
+    def genfunc(a):
+        return 'default'
+
+    @genfunc.when(lambda a: a > 5, type=int)
+    def _(a):
+        return 'a > 5'
+
+    @genfunc.when(lambda a: a < 5, type=int)
+    def _(a):
+        return 'a < 5'
+
+    assert genfunc(6) == 'a > 5'
+    assert genfunc(4) == 'a < 5'
+    assert genfunc(5) == 'default'
+
+
+def test_predicates_with_type_precondition_different_types():
+    # normally in Python, trying to evaluate the first predicate here - `lambda a: a % 2 == 0` -
+    # where type(a) is unicode, would raise a TypeError and crash the program.
+    # obviously that's because unicode doesn't support operator %.
+
+    # however here, when encountering the first predicate, an exception should not be raised.
+    # this is because before running the predicate, the precondition created by specifying `type=int` is checked.
+    # if it is False, the predicate is never run, and a TypeError is never raised.
+    # this is the point of having the `type=something` option.
+
+    # the `type` optional parameter should be used when predicates that expect different types are specified.
+
+    @genericfuncs.generic
+    def genfunc(a):
+        return 'default'
+
+    @genfunc.when(lambda a: a % 2 == 0, type=int)
+    def _(a):
+        return 'a % 2 == 0'
+
+    @genfunc.when(lambda a: a.startswith('bar'))
+    def _(a):
+        return 'a.startswith(\'bar\')'
+
+    @genfunc.when(lambda a: a.endswith('foo'), type=basestring)
+    def _(a):
+        return 'a.endswith(\'foo\')'
+
+    assert genfunc(8) == 'a % 2 == 0'
+    assert genfunc(a=8) == 'a % 2 == 0'
+
+    assert genfunc('abcfoo') == 'a.endswith(\'foo\')'
+    assert genfunc(a='abcfoo') == 'a.endswith(\'foo\')'
+
+    with pytest.raises(AttributeError):
+        genfunc(5)   # an AttributeError should be raised inside the second predicate (`a.startswith('bar')`),
+                     # because int objects don't have the `startswith` methodd.
+                     # the predicate is allowed to run, because `type=basestring` wasn't specified.
+
+    assert genfunc('abc') == 'default'

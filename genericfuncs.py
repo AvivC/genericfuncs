@@ -84,7 +84,7 @@ class generic(object):
         if len(args) > len(self._base_func.args):
             raise ValueError('Received too many positional arguments.')
 
-    def when(self, predicate, ignored_errors=None):
+    def when(self, predicate, type=None, ignored_errors=None):
         """
         A decorator used to register an implementation to a generic function.
         The decorator takes a predicate, to which the implementation will be mapped.
@@ -108,7 +108,7 @@ class generic(object):
                                Specifying `ignored_errors=[TypeError]` makes the error be silently ignored,
                                moving on to the next predicate.
         """
-        predicate_info = self._make_partial_func(predicate, ignored_errors=ignored_errors)
+        predicate_info = self._make_invokable_predicate(predicate, prepend_typecheck=type, ignored_errors=ignored_errors)
 
         def dec(func):
             impl_info = _PartialFunction(func, self._base_func)
@@ -123,18 +123,37 @@ class generic(object):
 
         return dec
 
-    def _make_partial_func(self, predicate, ignored_errors=None):
+    def _make_invokable_predicate(self, predicate, prepend_typecheck=None, ignored_errors=None):
         if isinstance(predicate, collections.Callable):
-            if inspect.isfunction(predicate) or inspect.ismethod(predicate):
-                return _PartialFunction(predicate, self._base_func, ignored_errors=ignored_errors)
+            if isinstance(predicate, _PartialFunction):
+                return predicate  # allow passing already ready predicates, but return them as is
+            elif inspect.isfunction(predicate) or inspect.ismethod(predicate):
+                invokable_predicate = _PartialFunction(predicate, self._base_func, ignored_errors=ignored_errors)
             elif isinstance(predicate, type):
-                return self._make_type_predicate(predicate, ignored_errors=ignored_errors)
+                invokable_predicate = self._make_type_predicate(predicate, ignored_errors=ignored_errors)
             else:  # callable object
-                return _PartialFunction(predicate.__call__, self._base_func, ignored_errors=ignored_errors)
+                invokable_predicate = _PartialFunction(predicate.__call__, self._base_func, ignored_errors=ignored_errors)
         elif isinstance(predicate, collections.Iterable):
-            return self._compose_predicates(predicate, ignored_errors=ignored_errors)
+            invokable_predicate = self._compose_predicates(predicate, ignored_errors=ignored_errors)
         else:
             raise TypeError('Input to when() is not a callable nor an iterable of callables.')
+
+        if prepend_typecheck is None:
+            return invokable_predicate
+        else:
+            return self._prepend_typecheck_to_predicate(prepend_typecheck, invokable_predicate,
+                                                        ignored_errors=ignored_errors)
+
+    def _prepend_typecheck_to_predicate(self, prepend_typecheck, invokable_predicate, ignored_errors=None):
+        if isinstance(prepend_typecheck, type):
+                type_checker = prepend_typecheck
+        elif isinstance(prepend_typecheck, collections.Iterable):
+                type_checker = self._compose_predicates(prepend_typecheck, aggregator=any, ignored_errors=ignored_errors)
+        else:
+            raise ValueError('type optional argument to when() has to be a type or an iterable of types. '
+                             'Can\'t be a {}.'.format(type(prepend_typecheck)))
+
+        return self._compose_predicates([type_checker, invokable_predicate], ignored_errors=ignored_errors)
 
     def _make_type_predicate(self, predicate, ignored_errors=None):
         def type_predicate(*args, **kwargs):
@@ -142,11 +161,11 @@ class generic(object):
                    and all(isinstance(obj, predicate) for key, obj in kwargs.iteritems())
         return _PartialFunction(type_predicate, self._base_func, args=self._base_func.args, ignored_errors=ignored_errors)
 
-    def _compose_predicates(self, predicates, ignored_errors=None):
-        partial_func_predicates = map(self._make_partial_func, predicates)
+    def _compose_predicates(self, predicates, aggregator=all, ignored_errors=None):
+        partial_func_predicates = map(self._make_invokable_predicate, predicates)
 
         def composed_predicates(*args, **kwargs):
-            return all(predicate(*args, **kwargs) for predicate in partial_func_predicates)
+            return aggregator(predicate(*args, **kwargs) for predicate in partial_func_predicates)
 
         return _PartialFunction(composed_predicates, self._base_func,
                                 args=self._base_func.args, ignored_errors=ignored_errors)
