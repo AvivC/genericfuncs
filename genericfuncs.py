@@ -72,9 +72,9 @@ class generic(object):
     def __call__(self, *args, **kwargs):
         self._validate_args(args, kwargs)
 
-        for predicate, func in self._predicates_and_funcs:
-            if self._invoke_partial_func(predicate, args, kwargs):
-                return self._invoke_partial_func(func, args, kwargs)
+        for predicate, function in self._predicates_and_funcs:
+            if predicate(*args, **kwargs):
+                return function(*args, **kwargs)
 
         return self._base_func(*args, **kwargs)
 
@@ -83,25 +83,6 @@ class generic(object):
             raise ValueError('One or more keyword arguments don\'t exist in the generic function.')
         if len(args) > len(self._base_func.args):
             raise ValueError('Received too many positional arguments.')
-
-    def _invoke_partial_func(self, partial_func, input_args, input_kwargs):
-        partial_args, partial_kwargs = \
-            self._get_partial_func_arg_and_kwarg_values(partial_func.args, input_args, input_kwargs)
-        try:
-            return partial_func(*partial_args, **partial_kwargs)
-        except partial_func.ignored_errors:
-            return False
-
-    def _get_partial_func_arg_and_kwarg_values(self, partial_func_arg_names, input_arg_values, input_kwargs):
-        partial_args = self._find_partial_arg_values(input_arg_values, partial_func_arg_names)
-        partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in partial_func_arg_names}
-        return partial_args, partial_kwargs
-
-    def _find_partial_arg_values(self, input_arg_values, partial_func_arg_names):
-        unnecessary_arg_names = set(self._base_func.args) - set(partial_func_arg_names)
-        unnecessary_arg_indexes = [self._base_func.args.index(arg_name) for arg_name in unnecessary_arg_names]
-        return [arg_value for index, arg_value in enumerate(input_arg_values)
-                if index not in unnecessary_arg_indexes]
 
     def when(self, predicate, ignored_errors=None):
         """
@@ -127,10 +108,10 @@ class generic(object):
                                Specifying `ignored_errors=[TypeError]` makes the error be silently ignored,
                                moving on to the next predicate.
         """
-        predicate_info = self._make_predicate_info(predicate, ignored_errors=ignored_errors)
+        predicate_info = self._make_partial_func(predicate, ignored_errors=ignored_errors)
 
         def dec(func):
-            impl_info = _FunctionInfo(func)
+            impl_info = _PartialFunction(func, self._base_func)
 
             if not self._all_params_valid(predicate_info):
                 raise ValueError('Argument specified in predicate doesn\'t exist in base function.')
@@ -142,14 +123,14 @@ class generic(object):
 
         return dec
 
-    def _make_predicate_info(self, predicate, ignored_errors=None):
+    def _make_partial_func(self, predicate, ignored_errors=None):
         if isinstance(predicate, collections.Callable):
             if inspect.isfunction(predicate) or inspect.ismethod(predicate):
-                return _FunctionInfo(predicate, ignored_errors=ignored_errors)
+                return _PartialFunction(predicate, self._base_func, ignored_errors=ignored_errors)
             elif isinstance(predicate, type):
                 return self._make_type_predicate(predicate, ignored_errors=ignored_errors)
             else:  # callable object
-                return _FunctionInfo(predicate.__call__, ignored_errors=ignored_errors)
+                return _PartialFunction(predicate.__call__, self._base_func, ignored_errors=ignored_errors)
         elif isinstance(predicate, collections.Iterable):
             return self._compose_predicates(predicate, ignored_errors=ignored_errors)
         else:
@@ -159,16 +140,16 @@ class generic(object):
         def type_predicate(*args, **kwargs):
             return all(isinstance(obj, predicate) for obj in args) \
                    and all(isinstance(obj, predicate) for key, obj in kwargs.iteritems())
-        return _FunctionInfo(type_predicate, args=self._base_func.args, ignored_errors=ignored_errors)
+        return _PartialFunction(type_predicate, self._base_func, args=self._base_func.args, ignored_errors=ignored_errors)
 
     def _compose_predicates(self, predicates, ignored_errors=None):
-        predicate_infos = map(self._make_predicate_info, predicates)
+        partial_func_predicates = map(self._make_partial_func, predicates)
 
         def composed_predicates(*args, **kwargs):
-            return all(self._invoke_partial_func(predicate, args, kwargs)
-                       for predicate in predicate_infos)
+            return all(predicate(*args, **kwargs) for predicate in partial_func_predicates)
 
-        return _FunctionInfo(composed_predicates, args=self._base_func.args, ignored_errors=ignored_errors)
+        return _PartialFunction(composed_predicates, self._base_func,
+                                args=self._base_func.args, ignored_errors=ignored_errors)
 
     def _all_params_valid(self, function_info):
         return all(arg in self._base_func.args for arg in function_info.args)
@@ -178,9 +159,8 @@ _PredicateFunctionMappping = namedtuple('PredicateFunctionMappping', ['predicate
 
 
 class _FunctionInfo(object):
-    def __init__(self, function, args=None, ignored_errors=None):
-        self.function = function
-        self.ignored_errors = () if ignored_errors is None else tuple(ignored_errors)
+    def __init__(self, function, args=None):
+        self._function = function
 
         if args is None:
             self.args = function.__code__.co_varnames[:function.__code__.co_argcount]
@@ -190,4 +170,30 @@ class _FunctionInfo(object):
             self.args = args
 
     def __call__(self, *args, **kwargs):
-        return self.function(*args, **kwargs)
+        return self._function(*args, **kwargs)
+
+
+class _PartialFunction(_FunctionInfo):
+    def __init__(self, function, base_function, args=None, ignored_errors=None):
+        super(_PartialFunction, self).__init__(function, args)
+
+        self._base_function = base_function
+        self.ignored_errors = () if ignored_errors is None else tuple(ignored_errors)
+
+    def __call__(self, *args, **kwargs):
+        partial_args, partial_kwargs = self._match_argument_values(args, kwargs)
+        try:
+            return self._function(*partial_args, **partial_kwargs)
+        except self.ignored_errors:
+            return False
+
+    def _match_argument_values(self, input_arg_values, input_kwargs):
+        partial_args = self._find_arg_values(input_arg_values)
+        partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in self.args}
+        return partial_args, partial_kwargs
+
+    def _find_arg_values(self, input_arg_values):
+        unnecessary_arg_names = set(self._base_function.args) - set(self.args)
+        unnecessary_arg_indexes = [self._base_function.args.index(arg_name) for arg_name in unnecessary_arg_names]
+        return [arg_value for index, arg_value in enumerate(input_arg_values)
+                if index not in unnecessary_arg_indexes]
