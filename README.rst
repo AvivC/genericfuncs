@@ -2,44 +2,45 @@
 genericfuncs
 ============
 
-:code:`genericfuncs` allows you to cleanly implement functions which execute different
+:code:`genericfuncs` allows you to create functions which execute different
 implementations depending on the arguments.
 
-This module can be seen as a powerful improvement over Python 3's `singledispatch`:
+This module can be seen as a powerful improvement over Python 3's :code:`singledispatch`:
 
 * Allows dispatch over any boolean callable, not just type checks.
 * Allows dispatch over any number of arguments, not just the first argument.
 
-Example usage::
 
-    # define a generic function
-    @genericfuncs.generic
+Basic usage
+***********
+
+    from genericfuncs import generic
+
+    @generic
     def func(a):
         # default implementation
-        raise TypeError()
+        raise ValueError()
 
-    # dispatch on type
-    @func.when(int)
-    def _when_int(a):
-        return a * a
-
-    # any boolean callable can be a predicate
-    @func.when(lambda a: a == 'magic')
-    def _when_magic_word(a):
+    @func.when(lambda a: a.startswith('foo')):
+    def _impl_1(a):
         return a.upper()
 
-    # multiple predicates
-    @func.when([float, lambda a: a < 0])
-    def _when_float_and_negative(a):
-        return a * -1
-
-    func(10) --> 100  # _when_int() invoked
-    func('magic') --> 'MAGIC'  # _when_magic_word() invoked
-    func(-5.5) --> 5.5  # _when_float_and_negative() invoked
-    func(Something()) --> TypeError raised  # default implementation invoked
+    @func.when(lambda a: a.startswith('bar')):
+    def _impl_2(a):
+        return a.lower()
 
 The first predicate that returns True has its mapped implementation invoked.
 Predicates are checked in order of definition.
+
+
+Installation
+************
+
+:code:`pip install genericfuncs`
+
+
+Advanced
+********
 
 Arguments are injected into predicates and implementations by their name.
 This means a predicate or implementation is able to specify only the arguments it needs. For example::
