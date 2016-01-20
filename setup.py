@@ -13,6 +13,7 @@ setup(
     author='Aviv Cohn',
     author_email='avivcohn123@yahoo.com',
     license='MIT',
+    platform='any',
     py_modules=['genericfuncs'],
     classifiers=[
         'Development Status :: 3 - Alpha',
