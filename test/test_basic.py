@@ -284,3 +284,25 @@ def test_type_precondition_as_dict():
     assert 'In a dict that maps arguments to expected types, the values must be either types or iterables of types.'\
            in str(exc_info)
 
+
+def test_dict_as_predicate():
+    @genericfuncs.generic
+    def genfunc(a, b):
+        return 'default'
+
+    @genfunc.when({
+        'a': lambda a: a > 5,
+        'b': lambda b: b < 5
+    }, type=int)
+    def _(a, b):
+        return 'a > 5 and b < 5'
+
+    @genfunc.when({
+        'b': basestring
+    })
+    def _(a, b):
+        return 'b is a basestring'
+
+    assert genfunc(10, 1) == 'a > 5 and b < 5'
+    assert genfunc(10, 'abc') == 'b is a basestring'
+    assert genfunc(5, 5) == 'default'

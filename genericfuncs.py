@@ -4,6 +4,7 @@ import collections
 import inspect
 from collections import namedtuple
 import functools
+from itertools import imap
 
 
 class generic(object):
@@ -84,59 +85,75 @@ class generic(object):
         if len(args) > len(self._base_func.args):
             raise ValueError('Received too many positional arguments.')
 
-    def when(self, predicate, type=None):
+    def when(self, predicate_source, type=None):
         """
         A decorator used to register an implementation to a generic function.
         The decorator takes a predicate, to which the implementation will be mapped.
         Upon invocation of the generic function, the first implementation whose
         predicate returned True will be invoked.
 
-        :param predicate: The predicate may be any one of the following options:
+        :param predicate_source: The predicate may be any one of the following options:
                             A type (meaning an `isinstance()` check), a callable that returns a boolean,
                             or a list of predicates (with AND relations between them):
         """
-        predicate_info = self._make_invokable_predicate(predicate, prepend_typecheck=type)
+        predicate = self._make_predicate(predicate_source, prepend_typecheck=type)
 
         def dec(func):
             impl_info = _PartialFunction(func, self._base_func)
 
-            if not self._all_params_valid(predicate_info):
+            if not self._all_params_valid(predicate):
                 raise ValueError('Argument specified in predicate doesn\'t exist in base function.')
             if not self._all_params_valid(impl_info):
                 raise ValueError('Argument specified in implementation doesn\'t exist in base function.')
 
-            self._predicates_and_funcs.append(_PredicateFunctionMappping(predicate_info, impl_info))
+            self._predicates_and_funcs.append(_PredicateFunctionMappping(predicate, impl_info))
             return func
 
         return dec
 
-    def _make_invokable_predicate(self, predicate, prepend_typecheck=None):
-        if isinstance(predicate, collections.Callable):
+    def _make_predicate(self, predicate_source, prepend_typecheck=None):
+        if isinstance(predicate_source, collections.Callable):
 
-            if isinstance(predicate, _PartialFunction):
-                invokable_predicate = predicate  # allow passing already ready predicates, but return them as is
+            if isinstance(predicate_source, _PartialFunction):
+                predicate = predicate_source  # allow passing already ready predicates, but return them as is
 
-            elif inspect.isfunction(predicate) or inspect.ismethod(predicate):
-                invokable_predicate = _PartialFunction(predicate, self._base_func)
+            elif inspect.isfunction(predicate_source) or inspect.ismethod(predicate_source):
+                predicate = _PartialFunction(predicate_source, self._base_func)
 
-            elif isinstance(predicate, type):
-                invokable_predicate = self._make_type_predicate(predicate)
+            elif isinstance(predicate_source, type):
+                predicate = self._make_type_predicate(predicate_source)
 
             else:  # different callable object
-                invokable_predicate = _PartialFunction(predicate.__call__, self._base_func)
+                predicate = _PartialFunction(predicate_source.__call__, self._base_func)
 
-        elif isinstance(predicate, collections.Iterable):
-            invokable_predicate = self._compose_predicates(predicate)
+        elif isinstance(predicate_source, dict):
+                arg_names_to_predicate_sources = predicate_source.iteritems()
+
+                arg_predicates = {
+                    arg_name: self._make_predicate(arg_predicate_source)
+                    for arg_name, arg_predicate_source in arg_names_to_predicate_sources
+                }
+
+                def predicate_func(*args, **kwargs):
+                    for arg_name, arg_predicate in arg_predicates.iteritems():
+                        if not arg_predicate(*args, **kwargs):  # arg_predicate knows by itself to pick the relevant argument
+                            return False
+                    return True
+
+                predicate = _PartialFunction(predicate_func, self._base_func, args=self._base_func.args)
+
+        elif isinstance(predicate_source, collections.Iterable):  # this check must appear after the dict check
+            predicate = self._compose_predicates(predicate_source)
 
         else:
             raise TypeError('Input to when() is not a callable nor an iterable of callables.')
 
         if prepend_typecheck is None:
-            return invokable_predicate
+            return predicate
         else:
-            return self._prepend_typecheck_to_predicate(prepend_typecheck, invokable_predicate)
+            return self._prepend_typecheck_to_predicate(prepend_typecheck, predicate)
 
-    def _prepend_typecheck_to_predicate(self, prepend_typecheck, invokable_predicate):
+    def _prepend_typecheck_to_predicate(self, prepend_typecheck, predicate):
         if isinstance(prepend_typecheck, (type, dict)):
             type_checker = self._make_type_predicate(prepend_typecheck)
         elif isinstance(prepend_typecheck, collections.Iterable):
@@ -145,7 +162,7 @@ class generic(object):
             raise ValueError('type optional argument to when() has to be a type or an iterable of types. '
                              'Can\'t be a {}.'.format(type(prepend_typecheck)))
 
-        return self._compose_predicates([type_checker, invokable_predicate])
+        return self._compose_predicates([type_checker, predicate])
 
     def _make_type_predicate(self, predicate):
         if isinstance(predicate, type):
@@ -175,7 +192,7 @@ class generic(object):
         return _PartialFunction(type_predicate, self._base_func, args=self._base_func.args)
 
     def _compose_predicates(self, predicates, aggregator=all):
-        partial_func_predicates = map(self._make_invokable_predicate, predicates)
+        partial_func_predicates = map(self._make_predicate, predicates)
 
         def composed_predicates(*args, **kwargs):
             return aggregator(predicate(*args, **kwargs) for predicate in partial_func_predicates)
@@ -216,6 +233,17 @@ class _FunctionInfo(object):
 
 
 class _PartialFunction(_FunctionInfo):
+    """A _PartialFunction is a function that is only interested
+    in some of the arguments to another function (the base function).
+    For example, the base function might take parameters a, b and c,
+    but a partial function over it might only be interested in parameters a and c.
+
+    Upon invocation of a partial function, the input arguments are filtered to leave
+    only those that are of interest to the partial function.
+    This is done using the argument names specified by the base function (via self._base_function.args)
+    and the args of the partial function (self.args).
+    """
+
     def __init__(self, function, base_function, args=None):
         super(_PartialFunction, self).__init__(function, args)
         self._base_function = base_function
