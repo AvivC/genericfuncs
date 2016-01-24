@@ -66,9 +66,10 @@ class generic(object):
     """
 
     def __init__(self, wrapped):
-        self._base_func = _FunctionInfo(wrapped)
+        # allow passing in ready _FunctionInfo objects
+        self._base_func = wrapped if isinstance(wrapped, _FunctionInfo) else _FunctionInfo(wrapped)
         self._predicates_and_funcs = []
-        functools.update_wrapper(self, wrapped)
+        # functools.update_wrapper(self, wrapped)
 
     def __call__(self, *args, **kwargs):
         self._validate_args(args, kwargs)
@@ -96,7 +97,7 @@ class generic(object):
                             A type (meaning an `isinstance()` check), a callable that returns a boolean,
                             or a list of predicates (with AND relations between them):
         """
-        predicate = self._make_predicate(predicate_source, prepend_typecheck=type)
+        predicate = self.make_predicate(predicate_source, prepend_typecheck=type)
 
         def dec(func):
             impl_info = _PartialFunction(func, self._base_func)
@@ -111,58 +112,47 @@ class generic(object):
 
         return dec
 
-    def _make_predicate(self, predicate_source, prepend_typecheck=None):
+    def make_predicate(self, predicate_source, prepend_typecheck=None):
         if isinstance(predicate_source, collections.Callable):
-
-            if isinstance(predicate_source, _PartialFunction):
-                predicate = predicate_source  # allow passing already ready predicates, but return them as is
-
-            elif inspect.isfunction(predicate_source) or inspect.ismethod(predicate_source):
-                predicate = _PartialFunction(predicate_source, self._base_func)
-
-            elif isinstance(predicate_source, type):
-                predicate = self._make_type_predicate(predicate_source)
-
-            else:  # different callable object
-                predicate = _PartialFunction(predicate_source.__call__, self._base_func)
-
+            predicate = self._make_predicate_from_callable(predicate_source)
         elif isinstance(predicate_source, dict):
-                arg_names_to_predicate_sources = predicate_source.iteritems()
-
-                arg_predicates = {
-                    arg_name: self._make_predicate(arg_predicate_source)
-                    for arg_name, arg_predicate_source in arg_names_to_predicate_sources
-                }
-
-                def predicate_func(*args, **kwargs):
-                    for arg_name, arg_predicate in arg_predicates.iteritems():
-                        if not arg_predicate(*args, **kwargs):  # arg_predicate knows by itself to pick the relevant argument
-                            return False
-                    return True
-
-                predicate = _PartialFunction(predicate_func, self._base_func, args=self._base_func.args)
-
+            predicate = self._make_predicate_from_dict(predicate_source)
         elif isinstance(predicate_source, collections.Iterable):  # this check must appear after the dict check
-            predicate = self._compose_predicates(predicate_source)
-
+            predicate = self._make_predicate_from_iterable(predicate_source)
         else:
-            raise TypeError('Input to when() is not a callable nor an iterable of callables.')
+            raise TypeError('Input to when() is not a callable, a dict or an iterable of callables.')
 
         if prepend_typecheck is None:
             return predicate
         else:
             return self._prepend_typecheck_to_predicate(prepend_typecheck, predicate)
 
-    def _prepend_typecheck_to_predicate(self, prepend_typecheck, predicate):
-        if isinstance(prepend_typecheck, (type, dict)):
-            type_checker = self._make_type_predicate(prepend_typecheck)
-        elif isinstance(prepend_typecheck, collections.Iterable):
-            type_checker = self._compose_predicates(prepend_typecheck, aggregator=any)
-        else:
-            raise ValueError('type optional argument to when() has to be a type or an iterable of types. '
-                             'Can\'t be a {}.'.format(type(prepend_typecheck)))
+    def _make_predicate_from_callable(self, predicate_source):
+        if isinstance(predicate_source, _PartialFunction):
+            return predicate_source  # allow passing already ready predicates, but return them as is
 
-        return self._compose_predicates([type_checker, predicate])
+        elif inspect.isfunction(predicate_source) or inspect.ismethod(predicate_source):
+            return _PartialFunction(predicate_source, self._base_func)
+
+        elif isinstance(predicate_source, type):
+            return self._make_type_predicate(predicate_source)
+
+        else:  # different callable object
+            return _PartialFunction(predicate_source.__call__, self._base_func)
+
+    def _make_predicate_from_dict(self, predicate_dict):
+        def predicate(*args, **kwargs):
+            for arg_name, arg_predicate_source in predicate_dict.iteritems():
+                arg_value = self._base_func.get_arg_value(arg_name, args, kwargs)
+
+                gen = generic(_FunctionInfo(args=[arg_name]))
+                arg_predicate = gen.make_predicate(arg_predicate_source)
+
+                if not arg_predicate(arg_value):
+                    return False
+            return True
+
+        return _PartialFunction(predicate, self._base_func, self._base_func.args)
 
     def _make_type_predicate(self, predicate):
         if isinstance(predicate, type):
@@ -191,13 +181,24 @@ class generic(object):
 
         return _PartialFunction(type_predicate, self._base_func, args=self._base_func.args)
 
-    def _compose_predicates(self, predicates, aggregator=all):
-        partial_func_predicates = map(self._make_predicate, predicates)
+    def _make_predicate_from_iterable(self, predicates, aggregator=all):
+        partial_func_predicates = map(self.make_predicate, predicates)
 
         def composed_predicates(*args, **kwargs):
             return aggregator(predicate(*args, **kwargs) for predicate in partial_func_predicates)
 
         return _PartialFunction(composed_predicates, self._base_func, args=self._base_func.args)
+
+    def _prepend_typecheck_to_predicate(self, prepend_typecheck, predicate):
+        if isinstance(prepend_typecheck, (type, dict)):
+            type_checker = self._make_type_predicate(prepend_typecheck)
+        elif isinstance(prepend_typecheck, collections.Iterable):
+            type_checker = self._make_predicate_from_iterable(prepend_typecheck, aggregator=any)
+        else:
+            raise ValueError('type optional argument to when() has to be a type or an iterable of types. '
+                             'Can\'t be a {}.'.format(type(prepend_typecheck)))
+
+        return self._make_predicate_from_iterable([type_checker, predicate])
 
     def _all_params_valid(self, function_info):
         return all(arg in self._base_func.args for arg in function_info.args)
@@ -207,8 +208,8 @@ _PredicateFunctionMappping = namedtuple('PredicateFunctionMappping', ['predicate
 
 
 class _FunctionInfo(object):
-    def __init__(self, function, args=None):
-        self._function = function
+    def __init__(self, function=None, args=None):
+        self._function = function if function is not None else lambda *args, **kwargs: None
 
         if args is None:
             self.args = function.__code__.co_varnames[:function.__code__.co_argcount]
