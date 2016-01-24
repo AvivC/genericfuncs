@@ -1,14 +1,16 @@
-from genericfuncs import generic
+import genericfuncs
 
 
-@generic
-def f(a):
+@genericfuncs.generic
+def genfunc(a, b):
     return 'default'
 
 
-@f.when(lambda a: True)
-def _(a):
-    return
+@genfunc.when({
+    'b': basestring
+})
+def _(a, b):
+    return 'b is a basestring'
 
 
-f(a=8)
+assert genfunc(10, 'abc') == 'b is a basestring'
