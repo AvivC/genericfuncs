@@ -84,7 +84,7 @@ class generic(object):
         if len(args) > len(self._base_func.args):
             raise ValueError('Received too many positional arguments.')
 
-    def when(self, predicate, type=None, ignored_errors=None):
+    def when(self, predicate, type=None):
         """
         A decorator used to register an implementation to a generic function.
         The decorator takes a predicate, to which the implementation will be mapped.
@@ -94,21 +94,8 @@ class generic(object):
         :param predicate: The predicate may be any one of the following options:
                             A type (meaning an `isinstance()` check), a callable that returns a boolean,
                             or a list of predicates (with AND relations between them):
-        :param ignored_errors: A list of exception types that should not be propagated
-                               if raised inside the predicate.
-                               For example:
-
-                                    @my_generic_func.when(lambda a: a > 10, ignored_errors=[TypeError])
-                                    def _implementation(a):
-                                        ...
-
-                               When invoking `my_generic_func(MyThing())`, a TypeError will be raised
-                               inside the predicate, probably crashing the program.
-                               This is because MyThing objects don't support `>` operator.
-                               Specifying `ignored_errors=[TypeError]` makes the error be silently ignored,
-                               moving on to the next predicate.
         """
-        predicate_info = self._make_invokable_predicate(predicate, prepend_typecheck=type, ignored_errors=ignored_errors)
+        predicate_info = self._make_invokable_predicate(predicate, prepend_typecheck=type)
 
         def dec(func):
             impl_info = _PartialFunction(func, self._base_func)
@@ -123,52 +110,77 @@ class generic(object):
 
         return dec
 
-    def _make_invokable_predicate(self, predicate, prepend_typecheck=None, ignored_errors=None):
+    def _make_invokable_predicate(self, predicate, prepend_typecheck=None):
         if isinstance(predicate, collections.Callable):
+
             if isinstance(predicate, _PartialFunction):
-                return predicate  # allow passing already ready predicates, but return them as is
+                invokable_predicate = predicate  # allow passing already ready predicates, but return them as is
+
             elif inspect.isfunction(predicate) or inspect.ismethod(predicate):
-                invokable_predicate = _PartialFunction(predicate, self._base_func, ignored_errors=ignored_errors)
+                invokable_predicate = _PartialFunction(predicate, self._base_func)
+
             elif isinstance(predicate, type):
-                invokable_predicate = self._make_type_predicate(predicate, ignored_errors=ignored_errors)
-            else:  # callable object
-                invokable_predicate = _PartialFunction(predicate.__call__, self._base_func, ignored_errors=ignored_errors)
+                invokable_predicate = self._make_type_predicate(predicate)
+
+            else:  # different callable object
+                invokable_predicate = _PartialFunction(predicate.__call__, self._base_func)
+
         elif isinstance(predicate, collections.Iterable):
-            invokable_predicate = self._compose_predicates(predicate, ignored_errors=ignored_errors)
+            invokable_predicate = self._compose_predicates(predicate)
+
         else:
             raise TypeError('Input to when() is not a callable nor an iterable of callables.')
 
         if prepend_typecheck is None:
             return invokable_predicate
         else:
-            return self._prepend_typecheck_to_predicate(prepend_typecheck, invokable_predicate,
-                                                        ignored_errors=ignored_errors)
+            return self._prepend_typecheck_to_predicate(prepend_typecheck, invokable_predicate)
 
-    def _prepend_typecheck_to_predicate(self, prepend_typecheck, invokable_predicate, ignored_errors=None):
-        if isinstance(prepend_typecheck, type):
-                type_checker = prepend_typecheck
+    def _prepend_typecheck_to_predicate(self, prepend_typecheck, invokable_predicate):
+        if isinstance(prepend_typecheck, (type, dict)):
+            type_checker = self._make_type_predicate(prepend_typecheck)
         elif isinstance(prepend_typecheck, collections.Iterable):
-                type_checker = self._compose_predicates(prepend_typecheck, aggregator=any, ignored_errors=ignored_errors)
+            type_checker = self._compose_predicates(prepend_typecheck, aggregator=any)
         else:
             raise ValueError('type optional argument to when() has to be a type or an iterable of types. '
                              'Can\'t be a {}.'.format(type(prepend_typecheck)))
 
-        return self._compose_predicates([type_checker, invokable_predicate], ignored_errors=ignored_errors)
+        return self._compose_predicates([type_checker, invokable_predicate])
 
-    def _make_type_predicate(self, predicate, ignored_errors=None):
-        def type_predicate(*args, **kwargs):
-            return all(isinstance(obj, predicate) for obj in args) \
-                   and all(isinstance(obj, predicate) for key, obj in kwargs.iteritems())
-        return _PartialFunction(type_predicate, self._base_func, args=self._base_func.args, ignored_errors=ignored_errors)
+    def _make_type_predicate(self, predicate):
+        if isinstance(predicate, type):
+            def type_predicate(*args, **kwargs):
+                return all(isinstance(obj, predicate) for obj in args) \
+                       and all(isinstance(obj, predicate) for key, obj in kwargs.iteritems())
 
-    def _compose_predicates(self, predicates, aggregator=all, ignored_errors=None):
+        elif isinstance(predicate, dict):
+            if any((not isinstance(value, (type, collections.Iterable))) for value in predicate.values()):
+                raise TypeError('In a dict that maps arguments to expected types, '
+                                'the values must be either types or iterables of types.')
+
+            def type_predicate(*args, **kwargs):
+                for arg_name, expected_arg_type in predicate.iteritems():
+                    arg_value = self._base_func.get_arg_value(arg_name, args, kwargs)
+
+                    if isinstance(expected_arg_type, collections.Iterable):
+                        expected_arg_type = tuple(expected_arg_type)
+
+                    if not isinstance(arg_value, expected_arg_type):
+                        return False
+                return True
+
+        else:
+            raise TypeError('A type predicate may be created from a type or a dictionary.')
+
+        return _PartialFunction(type_predicate, self._base_func, args=self._base_func.args)
+
+    def _compose_predicates(self, predicates, aggregator=all):
         partial_func_predicates = map(self._make_invokable_predicate, predicates)
 
         def composed_predicates(*args, **kwargs):
             return aggregator(predicate(*args, **kwargs) for predicate in partial_func_predicates)
 
-        return _PartialFunction(composed_predicates, self._base_func,
-                                args=self._base_func.args, ignored_errors=ignored_errors)
+        return _PartialFunction(composed_predicates, self._base_func, args=self._base_func.args)
 
     def _all_params_valid(self, function_info):
         return all(arg in self._base_func.args for arg in function_info.args)
@@ -191,25 +203,27 @@ class _FunctionInfo(object):
     def __call__(self, *args, **kwargs):
         return self._function(*args, **kwargs)
 
+    def get_arg_value(self, arg_name, input_args, input_kwargs):
+        try:
+            return input_kwargs[arg_name]
+        except KeyError:
+            pass
+        try:
+            arg_index = self.args.index(arg_name)
+            return input_args[arg_index]
+        except IndexError:
+            raise ValueError('Specified argument doesn\'t exist in generic function.')
+
 
 class _PartialFunction(_FunctionInfo):
-    def __init__(self, function, base_function, args=None, ignored_errors=None):
+    def __init__(self, function, base_function, args=None):
         super(_PartialFunction, self).__init__(function, args)
-
         self._base_function = base_function
-        self.ignored_errors = () if ignored_errors is None else tuple(ignored_errors)
 
     def __call__(self, *args, **kwargs):
-        partial_args, partial_kwargs = self._match_argument_values(args, kwargs)
-        try:
-            return self._function(*partial_args, **partial_kwargs)
-        except self.ignored_errors:
-            return False
-
-    def _match_argument_values(self, input_arg_values, input_kwargs):
-        partial_args = self._find_arg_values(input_arg_values)
-        partial_kwargs = {k: v for k, v in input_kwargs.iteritems() if k in self.args}
-        return partial_args, partial_kwargs
+        partial_args = self._find_arg_values(args)
+        partial_kwargs = {k: v for k, v in kwargs.iteritems() if k in self.args}
+        return self._function(*partial_args, **partial_kwargs)
 
     def _find_arg_values(self, input_arg_values):
         unnecessary_arg_names = set(self._base_function.args) - set(self.args)
