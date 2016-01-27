@@ -45,25 +45,37 @@ class generic(object):
     def _all_params_valid(self, function_info):
         return all(arg in self._generic_func_info.args for arg in function_info.args)
 
-    def _make_function_info(self, function_source):
+    def _make_function_info(self, function_source, base_args):
         if isinstance(function_source, collections.Callable):
-            args, function = self._make_function_info_from_callable(function_source)
+            args, function = self._make_function_info_from_callable(function_source, base_args)
         elif isinstance(function_source, collections.Iterable):
-            args, function = self._make_function_info_from_iterable(function_source)
+            args, function = self._make_function_info_from_iterable(function_source, base_args)
+        elif isinstance(function_source, dict):
+            args, function = self._make_function_info_from_dict(function_source, base_args)
         else:
             raise TypeError('Input to when() is not a callable, a dict or an iterable of callables.')
 
         return _FunctionInfo(function, args)
 
-    def _make_function_info_from_callable(self, function_source):
+    def _make_function_info_from_dict(self, function_source, base_args):
+        def predicate(*args, **kwargs):
+            for arg_name, arg_predicate_source in function_source.iteritems():
+                arg_predicate_info = self._make_function_info(arg_predicate_source, [arg_name])
+                arg_value = self.get_arg_value(self._generic_func_info.args, arg_name, args, kwargs)
+                if not arg_predicate_info.function(arg_value):
+                    return False
+            return True
+
+        function = predicate
+        args = base_args
+        return args, function
+
+    def _make_function_info_from_callable(self, function_source, base_args):
         if inspect.isfunction(function_source) or inspect.ismethod(function_source):
-            args = function_source.__code__.co_varnames[:function_source.__code__.co_argcount]
-            if inspect.ismethod(function_source):
-                args = args[1:]  # strip self arg
-            function = function_source
+            args, function = self._make_function_info_from_function(function_source)
         elif inspect.isclass(function_source):
             desired_type = function_source
-            args = self._generic_func_info.args
+            args = base_args
 
             def type_checker(*args, **kwargs):
                 return all(isinstance(arg, desired_type) for arg in args) \
@@ -75,7 +87,14 @@ class generic(object):
             args = function.__code__.co_varnames[:function.__code__.co_argcount][1:]  # strip self arg
         return args, function
 
-    def _make_function_info_from_iterable(self, function_source):
+    def _make_function_info_from_function(self, function_source):
+        args = function_source.__code__.co_varnames[:function_source.__code__.co_argcount]
+        if inspect.ismethod(function_source):
+            args = args[1:]  # strip self arg
+        function = function_source
+        return args, function
+
+    def _make_function_info_from_iterable(self, function_source, base_args):
         predicate_infos = map(self._make_function_info, function_source)
 
         def composed_predicates(*args, **kwargs):
@@ -87,8 +106,19 @@ class generic(object):
             return True
 
         function = composed_predicates
-        args = self._generic_func_info.args
+        args = base_args
         return args, function
+
+    def get_arg_value(self, base_args, arg_name, input_args, input_kwargs):
+        try:
+            return input_kwargs[arg_name]
+        except KeyError:
+            pass
+        try:
+            arg_index = base_args.index(arg_name)
+            return input_args[arg_index]
+        except IndexError:
+            raise ValueError('Specified argument doesn\'t exist in generic function.')
 
 
 _FunctionInfo = collections.namedtuple('_FunctionInfo', ['function', 'args'])
