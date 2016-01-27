@@ -142,35 +142,35 @@ def test_multiple_predicates():
     assert genfunc('parama', 'paramb', 'paramc') == {'c': 'paramc'}
     assert genfunc(10, 1.5, 5) == 'default'
 
-#
-# def test_genfunc_call_with_keyword_arguments():
-#     @genericfuncs.generic
-#     def genfunc(a, b, c):
-#         return 'default'
-#
-#     @genfunc.when(lambda a, b, c: a > b > c)
-#     def _(a, b, c):
-#         return [a, b, c]
-#
-#     assert genfunc(1, 1, 1) == 'default'
-#     assert genfunc(a=1, b=1, c=1) == 'default'
-#     assert genfunc(1, 1, c=1) == 'default'
-#     assert genfunc(1, b=1, c=1) == 'default'
-#     with pytest.raises(TypeError) as exc_info:
-#         genfunc(1, 1, 1, c=1)
-#     assert 'got multiple values for keyword argument' in str(exc_info)
-#     with pytest.raises(TypeError) as exc_info:
-#         genfunc(1, 1, 1, b=1, c=1)
-#     assert 'got multiple values for keyword argument' in str(exc_info)
-#
-#     assert genfunc(3, 2, 1) == [3, 2, 1]
-#     assert genfunc(a=3, b=2, c=1) == [3, 2, 1]
-#     assert genfunc(3, 2, c=1) == [3, 2, 1]
-#     with pytest.raises(TypeError) as exc_info:
-#         genfunc(3, 2, 1, b=2, c=1)
-#     assert 'got multiple values for keyword argument' in str(exc_info)
-#
-#
+
+def test_genfunc_call_with_keyword_arguments():
+    @genericfuncs.generic
+    def genfunc(a, b, c):
+        return 'default'
+
+    @genfunc.when(lambda a, b, c: a > b > c)
+    def _(a, b, c):
+        return [a, b, c]
+
+    assert genfunc(1, 1, 1) == 'default'
+    assert genfunc(a=1, b=1, c=1) == 'default'
+    assert genfunc(1, 1, c=1) == 'default'
+    assert genfunc(1, b=1, c=1) == 'default'
+    with pytest.raises(TypeError) as exc_info:
+        genfunc(1, 1, 1, c=1)
+    assert 'got multiple values for keyword argument' in str(exc_info)
+    with pytest.raises(TypeError) as exc_info:
+        genfunc(1, 1, 1, b=1, c=1)
+    assert 'got multiple values for keyword argument' in str(exc_info)
+
+    assert genfunc(3, 2, 1) == [3, 2, 1]
+    assert genfunc(a=3, b=2, c=1) == [3, 2, 1]
+    assert genfunc(3, 2, c=1) == [3, 2, 1]
+    with pytest.raises(TypeError) as exc_info:
+        genfunc(3, 2, 1, b=2, c=1)
+    assert 'got multiple values for keyword argument' in str(exc_info)
+
+
 # def test_invalid_genfunc_calls_raise_error():
 #     @genericfuncs.generic
 #     def genfunc(a, b, c):

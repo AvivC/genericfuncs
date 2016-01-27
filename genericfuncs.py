@@ -38,7 +38,7 @@ class generic(object):
         wanted_arg_indexes = [full_arg_names.index(arg_name) for arg_name in wanted_arg_names]
         arg_values = [arg_value for index, arg_value in enumerate(input_arg_values)
                       if index in wanted_arg_indexes]
-        kwarg_values = {k: v for k, v in input_kwarg_values.iteritems() if k in self.args}
+        kwarg_values = {k: v for k, v in input_kwarg_values.iteritems() if k in self._generic_func_info.args}
 
         return arg_values, kwarg_values
 
