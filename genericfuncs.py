@@ -36,14 +36,14 @@ class generic(object):
         return decorator
 
     def _all_params_valid(self, function_info):
-        return all(arg in self._base_args.args for arg in function_info.args)
+        return all(arg in self._base_args._args for arg in function_info.args)
 
 
 class _BaseArgs(object):
     def __init__(self, args):
         if not isinstance(args, collections.Sequence):
             raise TypeError('args must be a sequence.')
-        self.args = args if isinstance(args, tuple) else tuple(args)
+        self._args = args if isinstance(args, tuple) else tuple(args)
 
     @staticmethod
     def from_function(func):
@@ -76,7 +76,7 @@ class _BaseArgs(object):
                     return False
             return True
 
-        return _FunctionInfo(predicate, self.args)
+        return _FunctionInfo(predicate, self._args)
 
     def _make_function_info_from_callable(self, function_source):
         if inspect.isfunction(function_source) or inspect.ismethod(function_source):
@@ -92,7 +92,7 @@ class _BaseArgs(object):
                 return all(isinstance(arg, desired_type) for arg in args) \
                        and all(isinstance(v, desired_type) for k, v in kwargs.iteritems())
 
-            return _FunctionInfo(type_checker, self.args)
+            return _FunctionInfo(type_checker, self._args)
 
         else:
             # strip self arg
@@ -110,7 +110,7 @@ class _BaseArgs(object):
                     return False
             return True
 
-        return _FunctionInfo(composed_predicates, self.args)
+        return _FunctionInfo(composed_predicates, self._args)
 
     def get_arg_value(self, arg_name, input_args, input_kwargs):
         try:
@@ -118,20 +118,44 @@ class _BaseArgs(object):
         except KeyError:
             pass
         try:
-            arg_index = self.args.index(arg_name)
+            arg_index = self._args.index(arg_name)
             return input_args[arg_index]
         except IndexError:
             raise ValueError('Specified argument doesn\'t exist in generic function.')
 
     def find_args_for_arg_filtered_function(self, wanted_arg_names, input_arg_values, input_kwarg_values):
-        wanted_arg_indexes = [self.args.index(arg_name) for arg_name in wanted_arg_names]
+        wanted_arg_indexes = [self._args.index(arg_name) for arg_name in wanted_arg_names]
         arg_values = [arg_value for index, arg_value in enumerate(input_arg_values)
                       if index in wanted_arg_indexes]
-        kwarg_values = {k: v for k, v in input_kwarg_values.iteritems() if k in self.args}
+        kwarg_values = {k: v for k, v in input_kwarg_values.iteritems() if k in self._args}
 
         return arg_values, kwarg_values
 
+    def __getitem__(self, key):
+        return self._args[key]
 
-_FunctionInfo = collections.namedtuple('_FunctionInfo', ['function', 'args'])
+    def __len__(self):
+        return len(self._args)
+
+    def __iter__(self):
+        return iter(self._args)
+
+    def __reversed__(self):
+        return _BaseArgs(reversed(self._args))
+
+# _FunctionInfo = collections.namedtuple('_FunctionInfo', ['function', 'args'])
 
 
+class _FunctionInfo(object):
+    def __init__(self, function, args=None):
+        self.function = function
+
+        if args is not None:
+            self.args = args
+        else:
+            self.args = function.__code__.co_varnames[:function.__code__.co_argcount]
+            if inspect.ismethod(function):
+                self.args = self.args[1:]  # strip self arg
+
+# class _ArgInjectedFunction(object)
+#     def __init__(self):
