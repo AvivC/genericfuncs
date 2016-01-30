@@ -53,18 +53,18 @@ def test_correct_genfunc_impl_invoked():
     assert genfunc(2, 10, 0) == 'one or more is 0'
     assert genfunc(8, 8, 8) == 'a == b == c == 8'
 
-#
-# def test_invalid_predicate_raises_exception():
-#     @genericfuncs.generic
-#     def genfunc(n):
-#         return n * 2
-#
-#     with pytest.raises(TypeError):
-#         @genfunc.when(10)
-#         def impl(n):
-#             return 'should never run'
-#
-#
+
+def test_invalid_predicate_raises_exception():
+    @genericfuncs.generic
+    def genfunc(n):
+        return n * 2
+
+    with pytest.raises(TypeError):
+        @genfunc.when(10)
+        def impl(n):
+            return 'should never run'
+
+
 def test_parameter_injection():
     @genericfuncs.generic
     def genfunc(a, b, c, d):
