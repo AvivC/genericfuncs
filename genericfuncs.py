@@ -54,15 +54,17 @@ class _BaseArgs(object):
 
     def make_function_info(self, function_source):
         if isinstance(function_source, collections.Callable):
-            args, function = self._make_function_info_from_callable(function_source)
-        elif isinstance(function_source, dict):  # this check must appear before the Iterable check, because dicts are iterables
-            args, function = self._make_function_info_from_dict(function_source)
+            return self._make_function_info_from_callable(function_source)
+
+        # this check must appear before the Iterable check, because dicts are iterables
+        elif isinstance(function_source, dict):
+            return self._make_function_info_from_dict(function_source)
+
         elif isinstance(function_source, collections.Iterable):
-            args, function = self._make_function_info_from_iterable(function_source)
+            return self._make_function_info_from_iterable(function_source)
+
         else:
             raise TypeError('Input to when() is not a callable, a dict or an iterable of callables.')
-
-        return _FunctionInfo(function, args)
 
     def _make_function_info_from_dict(self, function_source):
         def predicate(*args, **kwargs):
@@ -74,33 +76,28 @@ class _BaseArgs(object):
                     return False
             return True
 
-        function = predicate
-        args = self.args
-        return args, function
+        return _FunctionInfo(predicate, self.args)
 
     def _make_function_info_from_callable(self, function_source):
         if inspect.isfunction(function_source) or inspect.ismethod(function_source):
-            args, function = self._make_function_info_from_function(function_source)
+            args = function_source.__code__.co_varnames[:function_source.__code__.co_argcount]
+            if inspect.ismethod(function_source):
+                args = args[1:]  # strip self arg
+            return _FunctionInfo(function_source, args)
+
         elif inspect.isclass(function_source):
             desired_type = function_source
-            args = self.args
 
             def type_checker(*args, **kwargs):
                 return all(isinstance(arg, desired_type) for arg in args) \
                        and all(isinstance(v, desired_type) for k, v in kwargs.iteritems())
 
-            function = type_checker
-        else:
-            function = function_source.__call__
-            args = function.__code__.co_varnames[:function.__code__.co_argcount][1:]  # strip self arg
-        return args, function
+            return _FunctionInfo(type_checker, self.args)
 
-    def _make_function_info_from_function(self, function_source):
-        args = function_source.__code__.co_varnames[:function_source.__code__.co_argcount]
-        if inspect.ismethod(function_source):
-            args = args[1:]  # strip self arg
-        function = function_source
-        return args, function
+        else:
+            # strip self arg
+            args = function_source.__call__.__code__.co_varnames[:function_source.__call__.__code__.co_argcount][1:]
+            return _FunctionInfo(function_source.__call__, args)
 
     def _make_function_info_from_iterable(self, function_source):
         predicate_infos = map(self.make_function_info, function_source)
@@ -113,9 +110,7 @@ class _BaseArgs(object):
                     return False
             return True
 
-        function = composed_predicates
-        args = self.args
-        return args, function
+        return _FunctionInfo(composed_predicates, self.args)
 
     def get_arg_value(self, arg_name, input_args, input_kwargs):
         try:
@@ -138,3 +133,5 @@ class _BaseArgs(object):
 
 
 _FunctionInfo = collections.namedtuple('_FunctionInfo', ['function', 'args'])
+
+
