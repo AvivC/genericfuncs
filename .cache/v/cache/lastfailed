@@ -1,8 +1,1 @@
-{
-  "test/test_basic.py::test_correct_genfunc_impl_invoked": true, 
-  "test/test_basic.py::test_genfunc_call_with_keyword_arguments": true, 
-  "test/test_basic.py::test_genfunc_with_only_default_impl": true, 
-  "test/test_basic.py::test_invalid_function_arguments_raise_exceptions": true, 
-  "test/test_basic.py::test_multiple_predicates": true, 
-  "test/test_basic.py::test_parameter_injection": true
-}
+{}

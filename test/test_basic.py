@@ -289,64 +289,37 @@ def test_genfunc_call_with_keyword_arguments():
 #             return ''
 #     assert 'In a dict that maps arguments to expected types, the values must be either types or iterables of types.' \
 #            in str(exc_info)
+
 #
-#
-# def test_dict_as_predicate():
-#     @genericfuncs.generic
-#     def genfunc(a, b):
-#         return 'default'
-#
-#     @genfunc.when({
-#         'a': lambda a: a == 5,
-#         'b': lambda b: b == 10
-#     })
-#     def _(a, b):
-#         return 'a == 5 and b == 10'
-#
-#     @genfunc.when({
-#         'b': int
-#     })
-#     def _(a, b):
-#         return 'b is an int'
-#
-#     @genfunc.when({
-#         'a': [int, lambda a: a % 2 == 0, lambda a: a > 20]
-#     })
-#     def _(a, b):
-#         return 'a is divisibe by 2 and greater than 20'
-#
-#     @genfunc.when({
-#         'a': lambda a: a.startswith('foo')
-#     }, type=basestring)
-#     def _(a, b):
-#         return 'a starts with foo and all args are strings'
-#
-#     @genfunc.when({
-#         'a': lambda a: a.startswith('foo')
-#     }, type={
-#         'a': basestring,
-#         'b': float
-#     })
-#     def _(a, b):
-#         return 'a starts with foo, a is a string and b is a float'
-#
-#     # not currently supported
-#     # @genfunc.when({
-#     #     'a': lambda a: a.startswith('foo')
-#     # }, type=[basestring, list])
-#     # def _(a, b):
-#     #     return 'a starts with foo and all are either strings or lists'
-#
-#     assert genfunc(5, 10) == 'a == 5 and b == 10'
-#     assert genfunc('bla', b=12) == 'b is an int'
-#     assert genfunc(a='bla', b=12) == 'b is an int'
-#     assert genfunc(5, 15) == 'b is an int'
-#     assert genfunc(30, 'bla') == 'a is divisibe by 2 and greater than 20'
-#     assert genfunc('foobla', 'bla') == 'a starts with foo and all args are strings'
-#     # not currently supported
-#     # assert genfunc('foobla', []) == 'a starts with foo and all are either strings or lists'
-#     assert genfunc([], []) == 'default'
-#     assert genfunc([], b=[]) == 'default'
-#     assert genfunc(a=[], b=[]) == 'default'
-#
-#
+def test_dict_as_predicate():
+    @genericfuncs.generic
+    def genfunc(a, b):
+        return 'default'
+
+    @genfunc.when({
+        'a': lambda a: a == 5,
+        'b': lambda b: b == 10
+    })
+    def _(a, b):
+        return 'a == 5 and b == 10'
+
+    @genfunc.when({
+        'b': int
+    })
+    def _(a, b):
+        return 'b is an int'
+
+    @genfunc.when({
+        'a': [int, lambda a: a % 2 == 0, lambda a: a > 20]
+    })
+    def _(a, b):
+        return 'a is divisibe by 2 and greater than 20'
+
+    assert genfunc(5, 10) == 'a == 5 and b == 10'
+    assert genfunc('bla', b=12) == 'b is an int'
+    assert genfunc(a='bla', b=12) == 'b is an int'
+    assert genfunc(5, 15) == 'b is an int'
+    assert genfunc(30, 'bla') == 'a is divisibe by 2 and greater than 20'
+    assert genfunc(14, 'bla') == 'default'
+    assert genfunc(14, b='bla') == 'default'
+    assert genfunc(a=14, b='bla') == 'default'
